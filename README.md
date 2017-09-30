@@ -1,2 +1,2 @@
-# turing
-Turing machine
+# Turing machine
+Simple Turing machine implementation in go
