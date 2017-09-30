@@ -1,0 +1,3 @@
+# starts turing machine with default values
+
+go run turing.go -alph files/alphabet -inst files/instructions -tape files/tape
