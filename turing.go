@@ -11,32 +11,26 @@ import (
 	"strings"
 )
 
-const (
-	LEFT  = iota
-	RIGHT
-	STOP
-)
-
 type Alphabet []string
 type Tape []string
 type Program map[State]map[Head]*Command
 
 type Command struct {
-	nHead      Head
+	cSymbol    string
 	nState     State
-	transition int
+	transition string
 }
 type Head string
 type State int
 
 type wLog struct {
-	TapeBefore  Tape
-	TapeAfter   Tape
-	HeadBefore  Head
-	HeadAfter   Head
-	StateBefore State
-	StateAfter  State
-	Cmd         Command
+	TapeBefore      Tape
+	TapeAfter       Tape
+	HeadIndexBefore int
+	HeadIndexAfter  int
+	HeadBefore      Head
+	StateBefore     State
+	Cmd             *Command
 }
 
 func main() {
@@ -46,9 +40,9 @@ func main() {
 		tapePath     = flag.String("tape", "", "path to tape file")
 		programPath  = flag.String("prog", "", "path to program file")
 
-		//savePath = flag.String("save", "", "if the flag is specified logs will be saved to specified file")
-		//verbose  = flag.Bool("v", false, "verbose output")
-		//display = flag.Bool("d", false, "display result")
+		logsPath = flag.String("logs", "./logs.txt", "logs will be saved to specified file")
+		verbose  = flag.Bool("v", false, "verbose output")
+		//display  = flag.Bool("d", false, "display result")
 	)
 
 	flag.Parse()
@@ -75,10 +69,67 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	if *verbose {
+		err = prepareLogFile(*logsPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
-func (wl *wLog) Log(savePath string, verbose bool) (bool, error) {
-	return true, nil
+func (wl *wLog) Log(verbose bool, logsPath string) error {
+
+	var (
+		f   *os.File
+		err error
+	)
+
+	if verbose {
+		f, err = os.OpenFile(logsPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Log: open file: [%s] err: [%s]", logsPath, err))
+		}
+
+		f.WriteString("\n --- ")
+		f.WriteString("\n" + strings.Join(wl.TapeBefore, ""))
+		f.WriteString("\n" + strings.Repeat(" ", wl.HeadIndexBefore) + "^")
+		f.WriteString("\n" + fmt.Sprintf("%d%s->%d%s%s", wl.StateBefore, wl.HeadBefore, wl.Cmd.nState, wl.Cmd.cSymbol, wl.Cmd.transition))
+		f.WriteString("\n" + strings.Join(wl.TapeAfter, ""))
+		f.WriteString("\n" + strings.Repeat(" ", wl.HeadIndexAfter) + "^")
+		f.WriteString("\n --- \n")
+
+		return f.Close()
+	}
+
+	return nil
+}
+
+func prepareLogFile(logsPath string) error {
+
+	var (
+		f   *os.File
+		err error
+	)
+
+	err = os.Remove(logsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			f, err = os.Create(logsPath)
+			if err != nil {
+				return errors.New(fmt.Sprintf("Log: create file: [%s] err: [%s]", logsPath, err))
+			}
+		} else {
+			return errors.New(fmt.Sprintf("Log: remove file: [%s] err: [%s]", logsPath, err))
+		}
+	} else {
+		f, err = os.Create(logsPath)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Log: create file: [%s] err: [%s]", logsPath, err))
+		}
+	}
+
+	return f.Close()
 }
 
 func LoadTape(tapePath string, alphabet *Alphabet) (*Tape, error) {
@@ -92,7 +143,6 @@ func LoadTape(tapePath string, alphabet *Alphabet) (*Tape, error) {
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("LoadTape: open file: [%s] err: [%s]", tapePath, err))
 	}
-	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
@@ -113,7 +163,7 @@ func LoadTape(tapePath string, alphabet *Alphabet) (*Tape, error) {
 		ok = false
 	}
 
-	return tape, nil
+	return tape, f.Close()
 }
 
 func LoadAlphabet(alphabetPath string) (*Alphabet, error) {
@@ -124,7 +174,6 @@ func LoadAlphabet(alphabetPath string) (*Alphabet, error) {
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("LoadAlphabet: open file: [%s] err: [%s]", alphabetPath, err))
 	}
-	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
@@ -132,7 +181,7 @@ func LoadAlphabet(alphabetPath string) (*Alphabet, error) {
 		*alphabet = strings.Split(scanner.Text(), " ")
 	}
 
-	return alphabet, nil
+	return alphabet, f.Close()
 }
 
 func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
@@ -148,9 +197,9 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 
 		cState     State
 		nState     State
-		cHead      Head
-		nHead      Head
-		transition int
+		head       Head
+		cSymbol    string
+		transition string
 
 		ok = false
 	)
@@ -159,7 +208,6 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("LoadProgram: open file: [%s] err: [%s]", programPath, err))
 	}
-	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
@@ -173,12 +221,12 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 		}
 
 		if len(line) != 7 {
-			return nil, errors.New(fmt.Sprintf("LoadProgram: parse program err: incorrect line [%s] line number: [%d]", line, lineIndex))
+			return nil, errors.New(fmt.Sprintf("LoadProgram: parse program err: incorrect line [%s] line: [%d]", line, lineIndex))
 		}
 
 		cStateInt, err = strconv.Atoi(line[0])
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("LoadProgram: parse program err: convert current state to int err: [%s]", err))
+			return nil, errors.New(fmt.Sprintf("LoadProgram: parse program err: convert current state to int err: [%s] line: [%d]", err, lineIndex))
 		}
 		cState = State(cStateInt)
 
@@ -191,25 +239,16 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 		if !ok {
 			return nil, errors.New(fmt.Sprintf("LoadProgram: unknown character: [%s] line: [%d]", line[1], lineIndex))
 		}
-		cHead = Head(line[1])
+		head = Head(line[1])
 
-		switch line[6] {
-		case ">":
-			transition = RIGHT
-			break
-		case "<":
-			transition = LEFT
-			break
-		case "!":
-			transition = STOP
-			break
-		default:
-			return nil, errors.New(fmt.Sprintf("LoadProgram: parse program err: parse head move err: incorrect symbol: [%s]", line[7]))
+		if line[6] != "<" && line[6] != ">" && line[6] != "!" {
+			return nil, errors.New(fmt.Sprintf("LoadProgram: parse program err: parse head move err: incorrect symbol: [%s] line: [%d]", line[6], lineIndex))
 		}
+		transition = line[6]
 
 		nStateInt, err = strconv.Atoi(line[4])
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("LoadProgram: convert next state to int err: [%s]", err))
+			return nil, errors.New(fmt.Sprintf("LoadProgram: convert next state to int err: [%s] line: [%d]", err, lineIndex))
 		}
 		nState = State(nStateInt)
 
@@ -222,13 +261,13 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 		if !ok {
 			return nil, errors.New(fmt.Sprintf("LoadProgram: unknown character: [%s] line: [%d]", line[5], lineIndex))
 		}
-		nHead = Head(line[5])
+		cSymbol = line[5]
 
 		program[cState] = make(map[Head]*Command)
-		program[cState][cHead] = &Command{
+		program[cState][head] = &Command{
 			nState:     nState,
 			transition: transition,
-			nHead:      nHead,
+			cSymbol:    cSymbol,
 		}
 	}
 
@@ -236,5 +275,5 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 		return nil, errors.New(fmt.Sprint("LoadProgram: load programm err: empty program"))
 	}
 
-	return &program, nil
+	return &program, f.Close()
 }
