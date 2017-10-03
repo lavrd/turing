@@ -16,7 +16,7 @@ type Tape []string
 type Program map[State]map[Head]*Command
 
 type Command struct {
-	cSymbol    string
+	nSymbol    string
 	nState     State
 	transition string
 }
@@ -60,18 +60,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, err = LoadTape(*tapePath, alphabet)
+	tape, err := LoadTape(*tapePath, alphabet)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = LoadProgram(*programPath, alphabet)
+	program, err := LoadProgram(*programPath, alphabet)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if *verbose {
-		err = prepareLogFile(*logsPath)
+		err = prepareLogFile(*logsPath, alphabet, tape, program)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func (wl *wLog) Log(verbose bool, logsPath string) error {
 		f.WriteString("\n --- ")
 		f.WriteString("\n" + strings.Join(wl.TapeBefore, ""))
 		f.WriteString("\n" + strings.Repeat(" ", wl.HeadIndexBefore) + "^")
-		f.WriteString("\n" + fmt.Sprintf("%d%s->%d%s%s", wl.StateBefore, wl.HeadBefore, wl.Cmd.nState, wl.Cmd.cSymbol, wl.Cmd.transition))
+		f.WriteString("\n" + fmt.Sprintf("%d%s->%d%s%s", wl.StateBefore, wl.HeadBefore, wl.Cmd.nState, wl.Cmd.nSymbol, wl.Cmd.transition))
 		f.WriteString("\n" + strings.Join(wl.TapeAfter, ""))
 		f.WriteString("\n" + strings.Repeat(" ", wl.HeadIndexAfter) + "^")
 		f.WriteString("\n --- \n")
@@ -105,29 +105,38 @@ func (wl *wLog) Log(verbose bool, logsPath string) error {
 	return nil
 }
 
-func prepareLogFile(logsPath string) error {
+func prepareLogFile(logsPath string, alphabet *Alphabet, tape *Tape, program *Program) error {
 
 	var (
 		f   *os.File
 		err error
 	)
 
-	err = os.Remove(logsPath)
+	f, err = os.Create(logsPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			f, err = os.Create(logsPath)
-			if err != nil {
-				return errors.New(fmt.Sprintf("Log: create file: [%s] err: [%s]", logsPath, err))
-			}
-		} else {
-			return errors.New(fmt.Sprintf("Log: remove file: [%s] err: [%s]", logsPath, err))
+		if os.IsExist(err) {
+			return f.Close()
 		}
-	} else {
-		f, err = os.Create(logsPath)
-		if err != nil {
-			return errors.New(fmt.Sprintf("Log: create file: [%s] err: [%s]", logsPath, err))
+
+		return errors.New(fmt.Sprintf("prepareLogFile: create file: [%s] err: [%s]", logsPath, err))
+	}
+
+	f.WriteString("\n----------\n")
+	f.WriteString("----------")
+
+	f.WriteString("\n\n" + fmt.Sprintf("Alphabet: %s\n", alphabet))
+	f.WriteString("\n" + fmt.Sprintf("Tape: %s\n\n", tape))
+
+	for state := range *program {
+		for head := range (*program)[state] {
+			cmd := (*program)[state][head]
+
+			f.WriteString(fmt.Sprintf("%d%s->%d%s%s\n", state, head, cmd.nState, cmd.nSymbol, cmd.transition))
 		}
 	}
+
+	f.WriteString("\n----------\n")
+	f.WriteString("----------\n")
 
 	return f.Close()
 }
@@ -198,7 +207,7 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 		cState     State
 		nState     State
 		head       Head
-		cSymbol    string
+		nSymbol    string
 		transition string
 
 		ok = false
@@ -261,13 +270,13 @@ func LoadProgram(programPath string, alphabet *Alphabet) (*Program, error) {
 		if !ok {
 			return nil, errors.New(fmt.Sprintf("LoadProgram: unknown character: [%s] line: [%d]", line[5], lineIndex))
 		}
-		cSymbol = line[5]
+		nSymbol = line[5]
 
 		program[cState] = make(map[Head]*Command)
 		program[cState][head] = &Command{
 			nState:     nState,
 			transition: transition,
-			cSymbol:    cSymbol,
+			nSymbol:    nSymbol,
 		}
 	}
 
