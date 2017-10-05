@@ -12,11 +12,13 @@ import (
 	"time"
 )
 
+// type for command
 type command struct {
 	symbol, transition string
 	state              int
 }
 
+// type for write log to file
 type wLog struct {
 	tapeBefore, tapeAfter, headBefore            string
 	headIndexBefore, headIndexAfter, stateBefore int
@@ -26,10 +28,10 @@ type wLog struct {
 func main() {
 
 	var (
-		alphabetPath = flag.String("alph", "", "path to alphabet file")
-		tapePath     = flag.String("tape", "", "path to tape file")
-		programPath  = flag.String("prog", "", "path to program file")
-		logsPath     = flag.String("logs", "./logs.txt", "logs will be saved to specified file")
+		alphabetPath = flag.String("alph", "./files/alphabet", "path to alphabet file")
+		tapePath     = flag.String("tape", "./files/tape", "path to tape file")
+		programPath  = flag.String("prog", "./files/program", "path to program file")
+		logsPath     = flag.String("logs", "./files/logs", "logs will be saved to specified file")
 		verbose      = flag.Bool("v", false, "verbose output")
 
 		f *os.File
@@ -79,58 +81,81 @@ func main() {
 	}
 }
 
+// run starts machine
 func run(tape []string, program *map[int]map[string]*command, verbose bool, f *os.File) error {
 
 	var (
-		i, state = 0, 0
-		iMax     = len(tape)
-		wl       = &wLog{}
+		// current head index
+		i = 0
+		// current state
+		state = 0
+		// to check for end of tape to increase it
+		iMax = len(tape)
+		// for write logs
+		wl = &wLog{}
 	)
 
 	for {
+		// save before for logs
 		wl.stateBefore = state
 		wl.headBefore = tape[i]
 		wl.headIndexBefore = i
 		wl.tapeBefore = strings.Join(tape, "")
 
+		// get new command
 		cmd := (*program)[state][tape[i]]
+		// and save it
 		wl.cmd = cmd
 
+		// get new state
 		state = cmd.state
 
+		// change head symbol
 		tape[i] = cmd.symbol
+		// and save it
 		wl.tapeAfter = strings.Join(tape, "")
 
+		// get transaction
 		switch cmd.transition {
 		case ">":
+			// move head right
 			i++
+			// if end of tape increase it
 			if i == iMax {
 				tape = append(tape, "_")
+				// new end of tape
 				iMax++
 			}
 			break
 		case "<":
+			// move head left
 			i--
+			// that index doesn't out of range we increase tape from start
 			if i == -1 {
 				tape = append([]string{"_"}, tape...)
 				i++
 			}
 			break
 		case "!":
+			// stop machine
 			return wl.log(verbose, f)
 		}
 
+		// save head index after
 		wl.headIndexAfter = i
 
+		// write log
 		err := wl.log(verbose, f)
 		if err != nil {
-			return err
+			return errors.New(fmt.Sprintf("log: [%s]", err))
 		}
 	}
 }
 
+// log write log to logs file
 func (wl *wLog) log(verbose bool, f *os.File) error {
 
+	// if verbose output
 	if verbose {
 		_, err := f.WriteString("\n" + wl.tapeBefore)
 		if err != nil {
@@ -158,6 +183,7 @@ func (wl *wLog) log(verbose bool, f *os.File) error {
 	return nil
 }
 
+// prepareLogsFile prepare logs file
 func prepareLogsFile(logsPath string, alphabet []string, tape []string, program *map[int]map[string]*command) error {
 
 	var (
@@ -165,6 +191,7 @@ func prepareLogsFile(logsPath string, alphabet []string, tape []string, program 
 		err error
 	)
 
+	// create if not exists
 	f, err = os.Create(logsPath)
 	if err != nil {
 		if os.IsExist(err) {
@@ -174,6 +201,7 @@ func prepareLogsFile(logsPath string, alphabet []string, tape []string, program 
 		return errors.New(fmt.Sprintf("create file: [%s] err: [%s]", logsPath, err))
 	}
 
+	// write alphabet, tape, program and date
 	f.WriteString("\n----------\n")
 	f.WriteString("----------")
 
@@ -195,6 +223,7 @@ func prepareLogsFile(logsPath string, alphabet []string, tape []string, program 
 	return f.Close()
 }
 
+// loadTape load tape from file
 func loadTape(tapePath string, alphabet []string) ([]string, error) {
 
 	var tape []string
@@ -210,6 +239,7 @@ func loadTape(tapePath string, alphabet []string) ([]string, error) {
 		tape = strings.Split(scanner.Text(), "")
 	}
 
+	// check for unknown characters
 	for _, t := range tape {
 		if !strings.Contains(strings.Join(alphabet, ""), t) {
 			return nil, errors.New(fmt.Sprintf("unknown character: [%v]", t))
@@ -219,6 +249,7 @@ func loadTape(tapePath string, alphabet []string) ([]string, error) {
 	return tape, f.Close()
 }
 
+// loadAphabet load alphabet from file
 func loadAlphabet(alphabetPath string) ([]string, error) {
 
 	var alphabet []string
@@ -237,12 +268,16 @@ func loadAlphabet(alphabetPath string) ([]string, error) {
 	return alphabet, f.Close()
 }
 
+// loadProgram load program from file
 func loadProgram(programPath string, alphabet []string) (*map[int]map[string]*command, error) {
 
 	var (
-		program                  = make(map[int]map[string]*command)
-		lineIndex, state, nState int
-		line                     []string
+		program = make(map[int]map[string]*command)
+		// line index, current state and new state from command
+		lineIndex, cState, nState int
+		// current file line
+		line []string
+		// command transition, current head, command symbol
 		transition, head, symbol string
 	)
 
@@ -257,51 +292,60 @@ func loadProgram(programPath string, alphabet []string) (*map[int]map[string]*co
 		line = strings.Split(scanner.Text(), "")
 		lineIndex++
 
+		// skip empty and comment line
 		if len(line) == 0 || line[0] == "#" {
 			continue
 		}
 
+		// if line len != 7 => line is incorrect
 		if len(line) != 7 {
 			return nil, errors.New(fmt.Sprintf("incorrect line [%s] line: [%d]", line, lineIndex))
 		}
 
-		state, err = strconv.Atoi(line[0])
+		// get current state and convert to int
+		cState, err = strconv.Atoi(line[0])
 		if err != nil {
 			return nil, errors.New(fmt.Sprintf("convert current state err: [%s] line: [%d]", err, lineIndex))
 		}
 
+		// get current head and check that it is in alphabet
 		head = line[1]
 		if !strings.Contains(strings.Join(alphabet, ""), head) {
 			return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", head, lineIndex))
 		}
 
+		// get transition and check
 		transition = line[6]
 		if transition != "<" && transition != ">" && transition != "!" {
 			return nil, errors.New(fmt.Sprintf("incorrect symbol: [%s] line: [%d]", transition, lineIndex))
 		}
 
+		// get new state and convert to int
 		nState, err = strconv.Atoi(line[4])
 		if err != nil {
 			return nil, errors.New(fmt.Sprintf("convert new state err: [%s] line: [%d]", err, lineIndex))
 		}
 
+		// get command symbol and check that it is in alphabet
 		symbol = line[5]
 		if !strings.Contains(strings.Join(alphabet, ""), symbol) {
 			return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", symbol, lineIndex))
 		}
 
-		if _, ok := program[state]; !ok {
-			program[state] = make(map[string]*command)
+		// added command to program and init second map if not exists
+		if _, ok := program[cState]; !ok {
+			program[cState] = make(map[string]*command)
 		}
-		program[state][head] = &command{
+		program[cState][head] = &command{
 			state:      nState,
 			transition: transition,
 			symbol:     symbol,
 		}
 	}
 
+	// check for empty program
 	if len(program) == 0 {
-		return nil, errors.New(fmt.Sprint("load programm err: empty program"))
+		return nil, errors.New(fmt.Sprint("load program err: empty program"))
 	}
 
 	return &program, f.Close()
