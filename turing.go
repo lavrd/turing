@@ -137,7 +137,8 @@ func run(tape []string, program *map[int]map[string]*command, verbose bool, f *o
 			}
 			break
 		case "!":
-			// stop machine
+			// display tape and stop machine
+			fmt.Printf("result tape: [ %s ]\n", strings.Join(tape, ""))
 			return wl.log(verbose, f)
 		}
 
