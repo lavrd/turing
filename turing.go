@@ -247,6 +247,11 @@ func loadTape(tapePath string, alphabet []string) ([]string, error) {
 		}
 	}
 
+	// if tape is nil append lambda
+	if len(tape) == 0 {
+		tape = append(tape, "_")
+	}
+
 	return tape, f.Close()
 }
 
@@ -290,17 +295,12 @@ func loadProgram(programPath string, alphabet []string) (*map[int]map[string]*co
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
-		line = strings.Split(scanner.Text(), "")
+		line = strings.Split(scanner.Text(), " ")
 		lineIndex++
 
 		// skip empty and comment line
-		if len(line) == 0 || line[0] == "#" {
+		if len(line) == 1 || line[0] == "#" {
 			continue
-		}
-
-		// if line len != 7 => line is incorrect
-		if len(line) != 7 {
-			return nil, errors.New(fmt.Sprintf("incorrect line [%s] line: [%d]", line, lineIndex))
 		}
 
 		// get current state and convert to int
@@ -312,25 +312,29 @@ func loadProgram(programPath string, alphabet []string) (*map[int]map[string]*co
 		// get current head and check that it is in alphabet
 		head = line[1]
 		if !strings.Contains(strings.Join(alphabet, ""), head) {
-			return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", head, lineIndex))
+			if head != "_" {
+				return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", head, lineIndex))
+			}
 		}
 
 		// get transition and check
-		transition = line[6]
+		transition = line[5]
 		if transition != "<" && transition != ">" && transition != "!" {
 			return nil, errors.New(fmt.Sprintf("incorrect symbol: [%s] line: [%d]", transition, lineIndex))
 		}
 
 		// get new state and convert to int
-		nState, err = strconv.Atoi(line[4])
+		nState, err = strconv.Atoi(line[3])
 		if err != nil {
 			return nil, errors.New(fmt.Sprintf("convert new state err: [%s] line: [%d]", err, lineIndex))
 		}
 
 		// get command symbol and check that it is in alphabet
-		symbol = line[5]
+		symbol = line[4]
 		if !strings.Contains(strings.Join(alphabet, ""), symbol) {
-			return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", symbol, lineIndex))
+			if symbol != "_" {
+				return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", symbol, lineIndex))
+			}
 		}
 
 		// added command to program and init second map if not exists
