@@ -82,7 +82,7 @@ func main() {
 }
 
 // run starts machine
-func run(tape []string, program *map[int]map[string]*command, verbose bool, f *os.File) error {
+func run(tape []string, program map[int]map[string]*command, verbose bool, f *os.File) error {
 
 	var (
 		// current head index
@@ -103,7 +103,7 @@ func run(tape []string, program *map[int]map[string]*command, verbose bool, f *o
 		wl.tapeBefore = strings.Join(tape, "")
 
 		// get new command
-		cmd := (*program)[state][tape[i]]
+		cmd := program[state][tape[i]]
 		// and save it
 		wl.cmd = cmd
 
@@ -185,7 +185,7 @@ func (wl *wLog) log(verbose bool, f *os.File) error {
 }
 
 // prepareLogsFile prepare logs file
-func prepareLogsFile(logsPath string, alphabet []string, tape []string, program *map[int]map[string]*command) error {
+func prepareLogsFile(logsPath string, alphabet []string, tape []string, program map[int]map[string]*command) error {
 
 	var (
 		f   *os.File
@@ -211,9 +211,9 @@ func prepareLogsFile(logsPath string, alphabet []string, tape []string, program 
 	f.WriteString(fmt.Sprintf("Tape: %s\n", tape))
 	f.WriteString("Program:\n")
 
-	for state := range *program {
-		for head := range (*program)[state] {
-			cmd := (*program)[state][head]
+	for state := range program {
+		for head := range program[state] {
+			cmd := program[state][head]
 			f.WriteString(fmt.Sprintf("\t%d%s->%d%s%s\n", state, head, cmd.state, cmd.symbol, cmd.transition))
 		}
 	}
@@ -238,6 +238,9 @@ func loadTape(tapePath string, alphabet []string) ([]string, error) {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		tape = strings.Split(scanner.Text(), "")
+		if scanner.Err() != nil {
+			return nil, err
+		}
 	}
 
 	// check for unknown characters
@@ -269,13 +272,16 @@ func loadAlphabet(alphabetPath string) ([]string, error) {
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		alphabet = strings.Split(scanner.Text(), " ")
+		if scanner.Err() != nil {
+			return nil, err
+		}
 	}
 
 	return alphabet, f.Close()
 }
 
 // loadProgram load program from file
-func loadProgram(programPath string, alphabet []string) (*map[int]map[string]*command, error) {
+func loadProgram(programPath string, alphabet []string) (map[int]map[string]*command, error) {
 
 	var (
 		program = make(map[int]map[string]*command)
@@ -296,6 +302,10 @@ func loadProgram(programPath string, alphabet []string) (*map[int]map[string]*co
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		line = strings.Split(scanner.Text(), " ")
+		if scanner.Err() != nil {
+			return nil, err
+		}
+
 		lineIndex++
 
 		// skip empty and comment line
@@ -353,5 +363,5 @@ func loadProgram(programPath string, alphabet []string) (*map[int]map[string]*co
 		return nil, errors.New(fmt.Sprint("load program err: empty program"))
 	}
 
-	return &program, f.Close()
+	return program, f.Close()
 }
