@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -84,6 +83,12 @@ func main() {
 // run starts machine
 func run(tape []string, program map[int]map[string]*command, verbose bool, f *os.File) error {
 
+	defer func() {
+		if _, ok := recover().(error); ok {
+			fmt.Println("program ended with an error")
+		}
+	}()
+
 	var (
 		// current head index
 		i = 0
@@ -126,7 +131,6 @@ func run(tape []string, program map[int]map[string]*command, verbose bool, f *os
 				// new end of tape
 				iMax++
 			}
-			break
 		case "<":
 			// move head left
 			i--
@@ -135,7 +139,6 @@ func run(tape []string, program map[int]map[string]*command, verbose bool, f *os
 				tape = append([]string{"_"}, tape...)
 				i++
 			}
-			break
 		case "!":
 			// display tape and stop machine
 			fmt.Printf("result tape: [ %s ]\n", strings.Join(tape, ""))
@@ -148,7 +151,7 @@ func run(tape []string, program map[int]map[string]*command, verbose bool, f *os
 		// write log
 		err := wl.log(verbose, f)
 		if err != nil {
-			return errors.New(fmt.Sprintf("log: [%s]", err))
+			return fmt.Errorf("log: [%s]", err)
 		}
 	}
 }
@@ -160,24 +163,24 @@ func (wl *wLog) log(verbose bool, f *os.File) error {
 	if verbose {
 		_, err := f.WriteString("\n" + wl.tapeBefore)
 		if err != nil {
-			return errors.New(fmt.Sprintf("write string err: [%s]", err))
+			return fmt.Errorf("write string err: [%s]", err)
 		}
 		_, err = f.WriteString("\n" + strings.Repeat(" ", wl.headIndexBefore) + "^")
 		if err != nil {
-			return errors.New(fmt.Sprintf("write string err: [%s]", err))
+			return fmt.Errorf("write string err: [%s]", err)
 		}
 		_, err = f.WriteString("\n" + fmt.Sprintf("%d%s->%d%s%s", wl.stateBefore,
 			wl.headBefore, wl.cmd.state, wl.cmd.symbol, wl.cmd.transition))
 		if err != nil {
-			return errors.New(fmt.Sprintf("write string err: [%s]", err))
+			return fmt.Errorf("write string err: [%s]", err)
 		}
 		_, err = f.WriteString("\n" + wl.tapeAfter)
 		if err != nil {
-			return errors.New(fmt.Sprintf("write string err: [%s]", err))
+			return fmt.Errorf("write string err: [%s]", err)
 		}
 		_, err = f.WriteString("\n" + strings.Repeat(" ", wl.headIndexAfter) + "^\n")
 		if err != nil {
-			return errors.New(fmt.Sprintf("write string err: [%s]", err))
+			return fmt.Errorf("write string err: [%s]", err)
 		}
 	}
 
@@ -196,11 +199,13 @@ func prepareLogsFile(logsPath string, alphabet []string, tape []string, program 
 	f, err = os.Create(logsPath)
 	if err != nil {
 		if os.IsExist(err) {
-			return f.Close()
+
+			return nil
 		}
 
-		return errors.New(fmt.Sprintf("create file: [%s] err: [%s]", logsPath, err))
+		return fmt.Errorf("create file: [%s] err: [%s]", logsPath, err)
 	}
+	defer f.Close()
 
 	// write alphabet, tape, program and date
 	f.WriteString("\n----------\n")
@@ -221,7 +226,7 @@ func prepareLogsFile(logsPath string, alphabet []string, tape []string, program 
 	f.WriteString("\n----------\n")
 	f.WriteString("----------\n")
 
-	return f.Close()
+	return nil
 }
 
 // loadTape load tape from file
@@ -231,7 +236,7 @@ func loadTape(tapePath string, alphabet []string) ([]string, error) {
 
 	f, err := os.Open(tapePath)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("open file: [%s] err: [%s]", tapePath, err))
+		return nil, fmt.Errorf("open file: [%s] err: [%s]", tapePath, err)
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -246,7 +251,7 @@ func loadTape(tapePath string, alphabet []string) ([]string, error) {
 	// check for unknown characters
 	for _, t := range tape {
 		if !strings.Contains(strings.Join(alphabet, ""), t) {
-			return nil, errors.New(fmt.Sprintf("unknown character: [%v]", t))
+			return nil, fmt.Errorf("unknown character: [%v]", t)
 		}
 	}
 
@@ -265,7 +270,7 @@ func loadAlphabet(alphabetPath string) ([]string, error) {
 
 	f, err := os.Open(alphabetPath)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("open file: [%s] err: [%s]", alphabetPath, err))
+		return nil, fmt.Errorf("open file: [%s] err: [%s]", alphabetPath, err)
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -295,7 +300,7 @@ func loadProgram(programPath string, alphabet []string) (map[int]map[string]*com
 
 	f, err := os.Open(programPath)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("open file: [%s] err: [%s]", programPath, err))
+		return nil, fmt.Errorf("open file: [%s] err: [%s]", programPath, err)
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -312,38 +317,41 @@ func loadProgram(programPath string, alphabet []string) (map[int]map[string]*com
 		if len(line) == 1 || line[0] == "#" {
 			continue
 		}
+		if len(line) != 6 {
+			return nil, fmt.Errorf("incerrect rule: [%s] line [%d]", strings.Join(line, " "), lineIndex)
+		}
 
 		// get current state and convert to int
 		cState, err = strconv.Atoi(line[0])
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("convert current state err: [%s] line: [%d]", err, lineIndex))
+			return nil, fmt.Errorf("convert current state err: [%s] line: [%d]", err, lineIndex)
 		}
 
 		// get current head and check that it is in alphabet
 		head = line[1]
 		if !strings.Contains(strings.Join(alphabet, ""), head) {
 			if head != "_" {
-				return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", head, lineIndex))
+				return nil, fmt.Errorf("unknown character: [%s] line: [%d]", head, lineIndex)
 			}
 		}
 
 		// get transition and check
 		transition = line[5]
 		if transition != "<" && transition != ">" && transition != "!" {
-			return nil, errors.New(fmt.Sprintf("incorrect symbol: [%s] line: [%d]", transition, lineIndex))
+			return nil, fmt.Errorf("incorrect symbol: [%s] line: [%d]", transition, lineIndex)
 		}
 
 		// get new state and convert to int
 		nState, err = strconv.Atoi(line[3])
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("convert new state err: [%s] line: [%d]", err, lineIndex))
+			return nil, fmt.Errorf("convert new state err: [%s] line: [%d]", err, lineIndex)
 		}
 
 		// get command symbol and check that it is in alphabet
 		symbol = line[4]
 		if !strings.Contains(strings.Join(alphabet, ""), symbol) {
 			if symbol != "_" {
-				return nil, errors.New(fmt.Sprintf("unknown character: [%s] line: [%d]", symbol, lineIndex))
+				return nil, fmt.Errorf("unknown character: [%s] line: [%d]", symbol, lineIndex)
 			}
 		}
 
@@ -360,7 +368,7 @@ func loadProgram(programPath string, alphabet []string) (map[int]map[string]*com
 
 	// check for empty program
 	if len(program) == 0 {
-		return nil, errors.New(fmt.Sprint("load program err: empty program"))
+		return nil, fmt.Errorf(fmt.Sprint("load program err: empty program"))
 	}
 
 	return program, f.Close()
