@@ -25,7 +25,6 @@ type wLog struct {
 }
 
 func main() {
-
 	var (
 		alphabetPath = flag.String("alph", "./files/alphabet", "path to alphabet file")
 		tapePath     = flag.String("tape", "./files/tape", "path to tape file")
@@ -69,7 +68,7 @@ func main() {
 
 		f, err = os.OpenFile(*logsPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 		if err != nil {
-			log.Fatalf("main: open file: [%s] err: [%s]", logsPath, err)
+			log.Fatalf("main: open file: [%v] err: [%v]", logsPath, err)
 		}
 		defer f.Close()
 	}
@@ -82,7 +81,6 @@ func main() {
 
 // run starts machine
 func run(tape []string, program map[int]map[string]*command, verbose bool, f *os.File) error {
-
 	defer func() {
 		if _, ok := recover().(error); ok {
 			fmt.Println("program ended with an error")
@@ -158,7 +156,6 @@ func run(tape []string, program map[int]map[string]*command, verbose bool, f *os
 
 // log write log to logs file
 func (wl *wLog) log(verbose bool, f *os.File) error {
-
 	// if verbose output
 	if verbose {
 		_, err := f.WriteString("\n" + wl.tapeBefore)
@@ -189,7 +186,6 @@ func (wl *wLog) log(verbose bool, f *os.File) error {
 
 // prepareLogsFile prepare logs file
 func prepareLogsFile(logsPath string, alphabet []string, tape []string, program map[int]map[string]*command) error {
-
 	var (
 		f   *os.File
 		err error
@@ -231,7 +227,6 @@ func prepareLogsFile(logsPath string, alphabet []string, tape []string, program 
 
 // loadTape load tape from file
 func loadTape(tapePath string, alphabet []string) ([]string, error) {
-
 	var tape []string
 
 	f, err := os.Open(tapePath)
@@ -265,7 +260,6 @@ func loadTape(tapePath string, alphabet []string) ([]string, error) {
 
 // loadAphabet load alphabet from file
 func loadAlphabet(alphabetPath string) ([]string, error) {
-
 	var alphabet []string
 
 	f, err := os.Open(alphabetPath)
@@ -287,7 +281,6 @@ func loadAlphabet(alphabetPath string) ([]string, error) {
 
 // loadProgram load program from file
 func loadProgram(programPath string, alphabet []string) (map[int]map[string]*command, error) {
-
 	var (
 		program = make(map[int]map[string]*command)
 		// line index, current state and new state from command
